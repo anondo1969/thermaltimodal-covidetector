@@ -13,13 +13,7 @@ import shutil
 video_file_directory_name = 'provide/the/directory/name/here'
 processed_rgb_database_name = 'provide/the/directory/name/here'
 
-frameRate = 0.5 #//it will capture image in each 0.5 second
-
-if os.path.isdir(processed_heatmap_database_name):
-    
-    shutil.rmtree(processed_heatmap_database_name)
-
-os.mkdir(processed_heatmap_database_name)
+frameRate = 0.5 #//it will capture image in every 0.5 second
 
 if os.path.isdir(processed_rgb_database_name):
     
@@ -27,9 +21,7 @@ if os.path.isdir(processed_rgb_database_name):
 
 os.mkdir(processed_rgb_database_name)
 
-
 all_directory_list = glob.glob(video_file_directory_name+'/HZ*')
-
 
 body_direction_list = ['Back', 'Front', 'Left', 'Right']
 
@@ -52,13 +44,11 @@ for patient_video_directory_name in patient_video_directory_list:
     patient_id = patient_video_directory_name.split('/')[-1]
     save_rgb_location = processed_rgb_database_name+'/'+patient_id
     
-    
     if os.path.isdir(save_rgb_location):
     
         shutil.rmtree(save_rgb_location)
     
     os.mkdir(save_rgb_location)
-    
     
     for body_direction_name in body_direction_list:
         
