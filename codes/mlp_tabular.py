@@ -517,7 +517,7 @@ positive_text = 'Positive'
 #first list is categorical, second one is numerical
 tabular_data_column_name_dict= {
     
-    'thermal_image' : [[], [str(i) for i in range(1, 262)]], # File: LabeledallQuant.xlsx, Sheet: FaceChestBackSides
+    'thermal_tabular' : [[], [str(i) for i in range(1, 262)]], # File: LabeledallQuant.xlsx, Sheet: FaceChestBackSides
     
     # File: subject_description.csv
     'symptoms': [['Other Symptom'], ['Fever', 'Cough', 'Sore Throat', 'Diarrhea', 'Vomit', 
