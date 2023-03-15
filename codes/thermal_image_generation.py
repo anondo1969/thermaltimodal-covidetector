@@ -10,6 +10,8 @@ import shutil
 '''
 
 # provide the directory names here
+
+#this directory structure is as is in the provided dataset
 video_file_directory_name = 'provide/the/directory/name/here'
 processed_rgb_database_name = 'provide/the/directory/name/here'
 
