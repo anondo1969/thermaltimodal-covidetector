@@ -29,20 +29,23 @@ warnings.filterwarnings('ignore')
 def add_args(parser):
 
     
-    parser.add_argument('--patient_file_name', type=str,
+    parser.add_argument('--patient_file_name', type=str, default='/home/dsv/maul8511/Desktop/paper-8/final/all_data.csv',
                         help='tabular data file')
     
-    parser.add_argument('--save_dir', type=str,
+    parser.add_argument('--save_dir', type=str, default='',
                         help='result directory')
     
     parser.add_argument('--tabular_data_type', type=str,
                         help='tabular data type')
     
-    parser.add_argument('--is_training', type=int, default=0,
+    parser.add_argument('--is_training', type=int, default=1,
                         help='training or testing')
                         
-    parser.add_argument('--is_header', type=int, default=1,
+    parser.add_argument('--is_header', type=int, default=0,
                         help='writing the header line')
+
+    parser.add_argument('--evaluation_metric', type=str, default='roc_auc',
+                        help='evaluation metric, roc_auc, average_precision')
     
     args = parser.parse_args()
     
@@ -103,8 +106,6 @@ def get_clean_splitted_tabular_data(data_columns_dict, choice, data_file_name, n
     df_id_class_neg_train = df_id_class_neg_train_valid.drop(df_id_class_neg_valid.index)
     
     df_train = pd.concat([df_id_class_pos_train, df_id_class_neg_train])
-    
-    df_train_valid = pd.concat([df_id_class_pos_train_valid, df_id_class_neg_train_valid])
     
     scaler = StandardScaler()
     
@@ -178,15 +179,20 @@ def run_experiment(model, model_name, tabular_data, hyperparameter_space, scorin
         
     result_dict[model_name+'_best_params']=best_model.best_params_
     
-    y_pred_valid = best_model.predict(X_valid)
     y_pred_prob_valid = best_model.predict_proba(X_valid)[:,1]
-        
-    result_dict[model_name+'_valid_auroc'] = metrics.roc_auc_score(y_valid, y_pred_prob_valid)
     
-    y_pred_test = best_model.predict(X_test)
+    if scoring=='roc_auc':
+        
+        result_dict[model_name+'_valid_'+scoring] = metrics.roc_auc_score(y_valid, y_pred_prob_valid)
+    else:
+        result_dict[model_name+'_valid_'+scoring] = metrics.average_precision_score(y_valid, y_pred_prob_valid)
+    
     y_pred_prob_test = best_model.predict_proba(X_test)[:,1]
         
-    result_dict[model_name+'_test_auroc'] = metrics.roc_auc_score(y_test, y_pred_prob_test)
+    if scoring=='roc_auc':
+        result_dict[model_name+'_test_'+scoring] = metrics.roc_auc_score(y_test, y_pred_prob_test)
+    else:
+        result_dict[model_name+'_test_'+scoring] = metrics.average_precision_score(y_test, y_pred_prob_test)
     
     result_dict[model_name+'_best_model'] = best_model
     
@@ -194,7 +200,7 @@ def run_experiment(model, model_name, tabular_data, hyperparameter_space, scorin
     
     print(result_dict[model_name+'_best_params'])
     
-    print('Validation AUROC Score: '+str(result_dict[model_name+'_valid_auroc']))
+    print('Validation '+scoring+' Score: '+str(result_dict[model_name+'_valid_'+scoring]))
 
     # configure the cross-validation procedure
     if no_stratification:
@@ -202,20 +208,20 @@ def run_experiment(model, model_name, tabular_data, hyperparameter_space, scorin
     else:
         cv_cross_validation = StratifiedKFold(n_splits=n_splits, shuffle=True, random_state=1969)
     # execute the nested cross-validation
-    result_dict[model_name+'_cross_validation_auroc_list'] = cross_val_score(best_model, X_train_valid, y_train_valid, scoring=scoring, cv=cv_cross_validation, n_jobs=-1)
+    result_dict[model_name+'_cross_validation_'+scoring+'_list'] = cross_val_score(best_model, X_train_valid, y_train_valid, scoring=scoring, cv=cv_cross_validation, n_jobs=-1)
     
-    result_dict[model_name+'_cross_validation_auroc_average'] = mean(result_dict[model_name+'_cross_validation_auroc_list'])
+    result_dict[model_name+'_cross_validation_'+scoring+'_average'] = mean(result_dict[model_name+'_cross_validation_'+scoring+'_list'])
         
-    print('Average cross-validation AUROC score: '+str(result_dict[model_name+'_cross_validation_auroc_average']))
+    print('Average cross-validation '+scoring+' score: '+str(result_dict[model_name+'_cross_validation_'+scoring+'_average']))
         
-    print('Cross-validation AUROC score list: '+str(result_dict[model_name+'_cross_validation_auroc_list']))
+    print('Cross-validation '+scoring+' score list: '+str(result_dict[model_name+'_cross_validation_'+scoring+'_list']))
 
-    print('Test AUROC Score: '+str(result_dict[model_name+'_test_auroc']))
+    print('Test '+scoring+' Score: '+str(result_dict[model_name+'_test_'+scoring]))
     
     print()
     
     f = open("XGBoost_random_forests_tabular_results.csv", "a")
-    f.write(model_name+","+data_type+","+str(result_dict[model_name+'_valid_auroc'])+","+str(result_dict[model_name+'_test_auroc'])+","+str(result_dict[model_name+'_cross_validation_auroc_average'])+"\n")
+    f.write(model_name+","+data_type+","+str(result_dict[model_name+'_valid_'+scoring])+","+str(result_dict[model_name+'_test_'+scoring])+","+str(result_dict[model_name+'_cross_validation_'+scoring+'_average'])+"\n")
     f.close()
         
     return result_dict
@@ -223,8 +229,6 @@ def run_experiment(model, model_name, tabular_data, hyperparameter_space, scorin
 
 def run_test(best_model, model_name, tabular_data, scoring, data_type, n_splits, no_stratification=False):
 
-    result_dict = dict()
-    
     X_train = tabular_data['X_train']
     X_train_valid=tabular_data['X_train_valid']
     X_valid=tabular_data['X_valid']
@@ -238,17 +242,25 @@ def run_test(best_model, model_name, tabular_data, scoring, data_type, n_splits,
     
     _ = best_model.fit(X_train, y_train)
         
-    y_pred_valid = best_model.predict(X_valid)
     y_pred_prob_valid = best_model.predict_proba(X_valid)[:,1]
-        
-    valid_auroc = metrics.roc_auc_score(y_valid, y_pred_prob_valid)
     
-    y_pred_test = best_model.predict(X_test)
+    if scoring=='roc_auc':
+        
+        valid_evaluation_score = metrics.roc_auc_score(y_valid, y_pred_prob_valid)
+    else:
+        valid_evaluation_score = metrics.average_precision_score(y_valid, y_pred_prob_valid)
+        
+    
     y_pred_prob_test = best_model.predict_proba(X_test)[:,1]
-        
-    test_auroc = metrics.roc_auc_score(y_test, y_pred_prob_test)
     
-    print('Validation AUROC Score: '+str(valid_auroc))
+    if scoring=='roc_auc':
+        
+        test_evaluation_score = metrics.roc_auc_score(y_test, y_pred_prob_test)
+    else:
+        test_evaluation_score = metrics.average_precision_score(y_test, y_pred_prob_test)
+        
+    
+    print('Validation '+scoring+': '+str(valid_evaluation_score))
 
     # configure the cross-validation procedure
     if no_stratification:
@@ -257,20 +269,20 @@ def run_test(best_model, model_name, tabular_data, scoring, data_type, n_splits,
         cv_cross_validation = StratifiedKFold(n_splits=n_splits, shuffle=True, random_state=1969)
     
     # execute the nested cross-validation
-    cross_validation_auroc_list = cross_val_score(best_model, X_train_valid, y_train_valid, scoring=scoring, cv=cv_cross_validation, n_jobs=-1)
+    cross_validation_evaluation_score_list = cross_val_score(best_model, X_train_valid, y_train_valid, scoring=scoring, cv=cv_cross_validation, n_jobs=-1)
     
-    cross_validation_auroc_average = mean(cross_validation_auroc_list)
+    cross_validation_evaluation_score_average = mean(cross_validation_evaluation_score_list)
         
-    print('Average four-fold cross-validation AUROC score: '+str(cross_validation_auroc_average))
+    print('Average cross-validation '+scoring+' score: '+str(cross_validation_evaluation_score_average))
         
-    print('four-fold cross-validation AUROC score list: '+str(cross_validation_auroc_list))
+    print('Cross-validation '+scoring+' score list: '+str(cross_validation_evaluation_score_list))
 
-    print('Test AUROC Score: '+str(test_auroc))
+    print('Test '+scoring+' Score: '+str(test_evaluation_score))
     
     print()
     
     f = open("XGBoost_random_forests_tabular_test_results.csv", "a")
-    f.write(model_name+","+data_type+","+str(valid_auroc)+","+str(test_auroc)+","+str(cross_validation_auroc_average)+"\n")
+    f.write(model_name+","+data_type+","+str(valid_evaluation_score)+","+str(test_evaluation_score)+","+str(cross_validation_evaluation_score_average)+"\n")
     f.close()
 
 
@@ -299,7 +311,7 @@ def arrange_tabular_data(tabular_data_column_dict):
                 data_type_combination=""
                 categorical_combination=[]
                 numeric_combination=[]
-                count=0
+                
                 for combination_index in combination_index_list:
                     
                     data_type_combination+=data_types[combination_index]
@@ -366,11 +378,16 @@ tabular_data_column_name_dict= {
 # choice_list contains all experiments names / tabular_data_type(s) 
 data_columns_dict, choice_list = arrange_tabular_data(tabular_data_column_name_dict)
 
+#print(choice_list)
+
+
+
 id_header = 'ID'
 label_header = 'PCR Result'
 positive_text = 'Positive'
 
-scoring = 'roc_auc'
+scoring = args.evaluation_metric
+print("Evaluation Metric: "+scoring)
 
 hyperparameter_spaces=dict()
 
@@ -400,7 +417,7 @@ if is_training:
 
     if args.is_header==1: #header line
         f = open("XGBoost_random_forests_tabular_results.csv", "a")
-        f.write("Model,Data,Validation AUROC,Test AUROC,Average Stratified Cross-Validation AUROC\n")
+        f.write("Model,Data,Validation "+scoring+",Test "+scoring+",Average Stratified Cross-Validation "+scoring+"\n")
         f.close()
     
         
@@ -413,7 +430,7 @@ if is_training:
     
         print(model_name)
     
-        model_results_dict[model_name] = run_experiment(models[model_name], model_name, tabular_data, hyperparameter_spaces[model_name], 'roc_auc', data_type, n_splits)
+        model_results_dict[model_name] = run_experiment(models[model_name], model_name, tabular_data, hyperparameter_spaces[model_name], scoring, data_type, n_splits)
         
     results_dict[data_type]=model_results_dict
     
@@ -427,7 +444,7 @@ else: #test only
     
     if args.is_header==1: #header line
         f = open("XGBoost_random_forests_tabular_test_results.csv", "a")
-        f.write("Model,Data,Validation AUROC,Test AUROC,Average Stratified Cross-Validation AUROC\n")
+        f.write("Model,Data,Validation "+scoring+",Test "+scoring+",Average Stratified Cross-Validation "+scoring+"\n")
         f.close()
 
     for model_name in list(models.keys()):
