@@ -14,11 +14,9 @@ import torch.optim as optim
 import optuna
 import pandas as pd
 import numpy as np
-from PIL import Image
 from torch.utils.data import Dataset
-from torchvision import transforms
 from torch.utils.data import DataLoader
-from sklearn.metrics import roc_auc_score
+from sklearn.metrics import roc_auc_score, average_precision_score
 import pickle
 import time
 import argparse
@@ -34,29 +32,32 @@ def add_args(parser):
     parser.add_argument('--tabular_data_type', type=str,
                         help='tabular data type')
     
-    parser.add_argument('--trial_num_in_total', type=int, default=2,
+    parser.add_argument('--trial_num_in_total', type=int, default=100,
                         help='number of total trials for hyperparameter tuning')
     
     parser.add_argument('--batch_size', type=int, default=0,
                         help='mini-batch size, 0 means it will take the whole train datasize')
     
-    parser.add_argument('--patient_file_name', type=str,
+    parser.add_argument('--patient_file_name', type=str, default='/home/dsv/maul8511/Desktop/paper-8/final/all_data.csv',
                         help='tabular data file')
     
-    parser.add_argument('--save_dir', type=str,
+    parser.add_argument('--save_dir', type=str, default='',
                         help='result directory')
     
-    parser.add_argument('--cross_validation', type=int, default=0,
+    parser.add_argument('--cross_validation', type=int, default=1,
                         help='--cross_validation')
     
-    parser.add_argument('--is_training', type=int, default=0,
+    parser.add_argument('--is_training', type=int, default=1,
                         help='training or testing')
     
     parser.add_argument('--is_transform', type=int, default=1,
                         help='transforming the data')
                         
-    parser.add_argument('--is_header', type=int, default=1,
+    parser.add_argument('--is_header', type=int, default=0,
                         help='writing the header line')
+    
+    parser.add_argument('--evaluation_metric', type=str, default='roc_auc',
+                        help='evaluation metric, roc_auc, average_precision')
     
     args = parser.parse_args()
     
@@ -208,11 +209,6 @@ class MLP_Tabular(nn.Module):
         
         device=neural_network_parameters['device']
 
-        total_tabular_input_features=neural_network_parameters['total_tabular_input_features']
-        num_tabular_fc_layers=neural_network_parameters['num_tabular_fc_layers']
-        num_classes=neural_network_parameters['num_classes']
-        tabular_fc_neurons_list=neural_network_parameters['tabular_fc_neurons_list']
-                
         tab_fc_layers = []
 
         tabular_in_neurons = neural_network_parameters['total_tabular_input_features']
@@ -248,7 +244,7 @@ class MLP_Tabular(nn.Module):
         return logits, probas
 
 
-def train_model(model, optimizer, train_dataloader, val_dataloader, num_epochs, trial=None):
+def train_model(model, optimizer, train_dataloader, val_dataloader, num_epochs, evaluation_metric, trial=None):
     
     torch.manual_seed(1)
     
@@ -284,19 +280,19 @@ def train_model(model, optimizer, train_dataloader, val_dataloader, num_epochs, 
             #if batch_idx==0:
             #    break
             
-        auroc = evaluation(model, val_dataloader)
+        evaluation_score = evaluation(model, val_dataloader, evaluation_metric)
             
         if trial!=None:
             # Add prune mechanism
-            trial.report(auroc, epoch)
+            trial.report(evaluation_score, epoch)
 
             if trial.should_prune():
                 raise optuna.exceptions.TrialPruned()
                 
-    return deepcopy(model.state_dict()), auroc
+    return deepcopy(model.state_dict()), evaluation_score
     
 
-def evaluation(model, data_loader):
+def evaluation(model, data_loader, evaluation_metric):
     model = model.eval()
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     correct_pred, num_examples = 0, 0
@@ -321,15 +317,23 @@ def evaluation(model, data_loader):
         y_predicted_probability_scores.extend(proba_score.tolist())        
         y_predicted_labels.extend(predicted_labels.tolist())
         
-    try:
-        auroc = roc_auc_score(y_true_labels,  y_predicted_probability_scores)
-    except ValueError:
-        auroc = 0
+    
+    if evaluation_metric=='roc_auc':
         
-    return auroc
+        try:
+            evaluation_score = roc_auc_score(y_true_labels,  y_predicted_probability_scores)
+        except ValueError:
+            evaluation_score = 0
+    else:  
+        try:
+            evaluation_score = average_precision_score(y_true_labels,  y_predicted_probability_scores)
+        except ValueError:
+            evaluation_score = 0
+        
+    return evaluation_score
 
 
-def objective(trial, total_tabular_input_features, train_dataloader, val_dataloader, save_name):
+def objective(trial, total_tabular_input_features, train_dataloader, val_dataloader, save_name, evaluation_metric):
     
     """
     An objective function that accepts multiple parameters.
@@ -360,7 +364,7 @@ def objective(trial, total_tabular_input_features, train_dataloader, val_dataloa
     # Generate the optimizers
     optimizer = getattr(optim, neural_network_parameters['optimizer'])(model.parameters(), lr=neural_network_parameters['lr'])
     
-    trained_model_state_dict, auroc = train_model(model, optimizer, train_dataloader, val_dataloader, neural_network_parameters['num_epochs'], trial=trial)
+    trained_model_state_dict, evaluation_score = train_model(model, optimizer, train_dataloader, val_dataloader, neural_network_parameters['num_epochs'], evaluation_metric, trial=trial)
     
     trial.set_user_attr(key="current_model_state_dict", value=trained_model_state_dict)
 
@@ -368,7 +372,7 @@ def objective(trial, total_tabular_input_features, train_dataloader, val_dataloa
     
     trial.set_user_attr(key="total_tabular_input_features", value=total_tabular_input_features)
     
-    return auroc
+    return evaluation_score
 
 
 def callback(study, trial):
@@ -392,12 +396,12 @@ def callback(study, trial):
         pickle.dump(neural_network_parameters, open(current_best_model_save_name+'_hyper_parameters', 'wb'))
         
 
-def calculate_cross_validation(data_type, no_stratification, neural_network_parameters, data_columns_dict, patient_file_name, batch_size, save_dir, transform):
+def calculate_cross_validation(data_type, no_stratification, neural_network_parameters, data_columns_dict, patient_file_name, batch_size, save_dir, transform, evaluation_metric):
     
     
     cross_validation_tabular_dfs, total_tabular_input_features, n_splits = get_clean_splitted_tabular_data(data_columns_dict, data_type, patient_file_name, transform, cross_validation=True, no_stratification=no_stratification)
     
-    cross_validation_auroc_list = []
+    cross_validation_evaluation_score_list = []
 
     for fold in range(n_splits):
     
@@ -411,15 +415,15 @@ def calculate_cross_validation(data_type, no_stratification, neural_network_para
         cross_validation_train_dataloader = DataLoader(cross_validation_train, batch_size=batch_size, drop_last=False)
         cross_validation_val_dataloader = DataLoader(cross_validation_val, batch_size=batch_size)
     
-        cross_validation_trained_model_state_dict, auroc_score = train_model(reset_model, cross_validation_best_optimizer, cross_validation_train_dataloader, cross_validation_val_dataloader, neural_network_parameters['num_epochs'])
+        cross_validation_trained_model_state_dict, evaluation_score = train_model(reset_model, cross_validation_best_optimizer, cross_validation_train_dataloader, cross_validation_val_dataloader, neural_network_parameters['num_epochs'], evaluation_metric)
     
-        cross_validation_auroc_list.append(auroc_score)
+        cross_validation_evaluation_score_list.append(evaluation_score)
         
         save_model_name = save_dir+"mlp_cross_validation_model_fold_"+str(fold+1)+"_no_stratification_"+str(no_stratification)+"_"+data_type+"_batch_size_"+str(batch_size)+".pt"
 
         torch.save(cross_validation_trained_model_state_dict, save_model_name)
         
-    return cross_validation_auroc_list
+    return cross_validation_evaluation_score_list
     
 
 def arrange_NN_parameters(model_hyperparameters, total_tabular_input_features):
@@ -464,7 +468,7 @@ def arrange_tabular_data(tabular_data_column_dict):
                 data_type_combination=""
                 categorical_combination=[]
                 numeric_combination=[]
-                count=0
+
                 for combination_index in combination_index_list:
                     
                     data_type_combination+=data_types[combination_index]
@@ -550,6 +554,9 @@ print('Data Type: '+data_type)
 batch_size = args.batch_size
 print("Batch Size: "+str(batch_size))
 
+evaluation_metric = args.evaluation_metric
+print("Evaluation Metric: "+evaluation_metric)
+
 n_trials=args.trial_num_in_total
 print('Total Hyperparameter training trials: ' +str(n_trials))
 
@@ -572,7 +579,7 @@ results_dict= dict()
 if is_training:
     
     # Wrap the objective inside a lambda and call objective inside it
-    objective_func = lambda trial: objective(trial, total_tabular_input_features, train_dataloader, val_dataloader, save_name)
+    objective_func = lambda trial: objective(trial, total_tabular_input_features, train_dataloader, val_dataloader, save_name, evaluation_metric)
 
     # Pass func to Optuna studies
     study = optuna.create_study(direction="maximize", sampler=optuna.samplers.TPESampler(), pruner=optuna.pruners.MedianPruner())
@@ -601,43 +608,46 @@ else: #test only
     best_model = MLP_Tabular(neural_network_parameters)
     best_model.load_state_dict(torch.load(save_name))
     
-validation_AUROC_score=evaluation(best_model, val_dataloader)
+validation_evaluation_score=evaluation(best_model, val_dataloader, evaluation_metric)
 
-print('Validation AUROC Score: '+str(validation_AUROC_score))
+print('Validation '+evaluation_metric+' Score: '+str(validation_evaluation_score))
 
-test_AUROC_score=evaluation(best_model, data_loader=test_dataloader)
+test_evaluation_score=evaluation(best_model, test_dataloader, evaluation_metric)
 
-print('Test AUROC Score: '+str(test_AUROC_score))
+print('Test '+evaluation_metric+' Score: '+str(test_evaluation_score))
+
+results_dict[data_type+"_test_"+evaluation_metric]=test_evaluation_score
+
+results_dict[data_type+"_validation_"+evaluation_metric]=validation_evaluation_score
 
 if cross_validation!=0:
     
-    cv_with_AUROC_list = calculate_cross_validation(data_type, False, neural_network_parameters, data_columns_dict, patient_file_name, batch_size, save_dir, transform)
-    mean_with_cv=mean(np.array(cv_with_AUROC_list))
+    cv_with_evaluation_score_list = calculate_cross_validation(data_type, False, neural_network_parameters, data_columns_dict, patient_file_name, batch_size, save_dir, transform, evaluation_metric)
+    mean_with_cv=mean(np.array(cv_with_evaluation_score_list))
     
-    print('With stratification, Average cross-validation AUROC score: '+str(mean_with_cv))
-    print('With stratification, Cross-validation AUROC score list: '+str(cv_with_AUROC_list))
+    print('With stratification, Average cross-validation '+evaluation_metric+' score: '+str(mean_with_cv))
+    print('With stratification, Cross-validation '+evaluation_metric+' score list: '+str(cv_with_evaluation_score_list))
     
     f = open("mlp_results.csv", "a")
     if args.is_header==1: #header line
-        f.write("Model,Data,Batch Size,Validation AUROC,Test AUROC,Average Stratified Cross-Validation AUROC\n")
-    f.write("MLP,"+data_type+","+str(validation_AUROC_score)+","+str(test_AUROC_score)+","+str(mean_with_cv)+"\n")
+        f.write("Model,Data,Batch Size,Validation "+evaluation_metric+",Test "+evaluation_metric+",Average Stratified Cross-Validation "+evaluation_metric+"\n")
+    f.write("MLP,"+data_type+","+str(validation_evaluation_score)+","+str(test_evaluation_score)+","+str(mean_with_cv)+"\n")
     f.close()
-     
-if is_training and cross_validation!=0:
+         
+    results_dict[data_type+"_cv_with_stratification_avg_"+evaluation_metric+"_score"]=mean_with_cv
+    results_dict[data_type+"_cv_with_stratification_"+evaluation_metric+"_score_list"]=cv_with_evaluation_score_list
     
-    results_dict[data_type+"_cv_with_stratification_avg_AUROC_score"]=mean_with_cv
-    results_dict[data_type+"_cv_with_stratification_AUROC_score_list"]=cv_with_AUROC_list
-    
+print(results_dict)
+
 if is_training:
 
-    results_dict[data_type+"_test_AUROC"]=test_AUROC_score
-
-    results_dict[data_type+"_validation_AUROC"]=validation_AUROC_score
+    pickle.dump(results_dict, open(save_dir+"mlp_training_results_dict_"+data_type+"_batch_size_"+str(batch_size), 'wb'))
     
-    pickle.dump(results_dict, open(save_dir+"mlp_results_dict_"+data_type+"_batch_size_"+str(batch_size), 'wb'))
+else:
     
-    print(results_dict)
-
+    pickle.dump(results_dict, open(save_dir+"mlp_test_results_dict_"+data_type+"_batch_size_"+str(batch_size), 'wb'))
+    
+    
 print()
 print('Finished, Total time taken: {:.0f}m {:.0f}s'.format((time.time() - start_time) // 60,
                                                                     (time.time() - start_time) % 60))
