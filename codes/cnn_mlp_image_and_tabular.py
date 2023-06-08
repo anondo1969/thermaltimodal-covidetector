@@ -54,7 +54,7 @@ def add_args(parser):
                         help='result directory')
     
     parser.add_argument('--cross_validation', type=int, default=1,
-                        help='4 fold cross validation')
+                        help='k fold cross validation')
     
     parser.add_argument('--is_training', type=int, default=1,
                         help='training or testing')
