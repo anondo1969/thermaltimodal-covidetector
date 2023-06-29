@@ -1,6 +1,6 @@
-# How to get the acess of the COVID-19 Thermal Image Dataset?
+# How to get acess to the COVID-19 Thermal Image Dataset?
 
-Please visit the following link to get the acess of the COVID-19 thermal Iimage dataset entitled 'Upper body thermal images and associated clinical data from a pilot cohort study of COVID-19' [1, 2],
+Please visit the following link to get acess to the COVID-19 thermal image dataset entitled 'Upper body thermal images and associated clinical data from a pilot cohort study of COVID-19' [1, 2],
 
 https://physionet.org/content/covid-19-thermal/1.1/
 
