@@ -1,6 +1,6 @@
 # thermal-multimodal-covid-detector
 
-**[COVID-19 detection from thermal image and tabular medical data utilizing multi-modal machine learning](https://doi.org/10.1109/CBMS58004.2023.00122)**, Mahbub Ul Alam, Jaakko Hollmén and Rahim Rahmani. IEEE 36th International Symposium on Computer-Based Medical Systems (CBMS), 2023, pp. 646-653, https://doi.org/10.1109/CBMS58004.2023.00122. (**[presentation slides](https://github.com/anondo1969/thremaltimodal-covidetector/raw/main/slides_and_results/presentation_slides_v3.pdf)**)
+**[COVID-19 detection from thermal image and tabular medical data utilizing multi-modal machine learning](https://doi.org/10.1109/CBMS58004.2023.00294)**, Mahbub Ul Alam, Jaakko Hollmén and Rahim Rahmani. IEEE 36th International Symposium on Computer-Based Medical Systems (CBMS), 2023, pp. 646-653, https://doi.org/10.1109/CBMS58004.2023.00294. (**[presentation slides](https://github.com/anondo1969/thremaltimodal-covidetector/raw/main/slides_and_results/presentation_slides_v3.pdf)**)
 
 ## Abstract
 
@@ -25,16 +25,15 @@ M.U. Alam, J. Hollmén and R. Rahmani, "COVID-19 detection from thermal image an
 ### Bibtex Format for Citation
 
 ```
-@INPROCEEDINGS{alam2023_covid19,
-  author={Alam, Mahbub Ul and Hollmén, Jaakko and Rahmani, Rahim},
+@INPROCEEDINGS{10178787,
+  author={Ul Alam, Mahbub and Hollmén, Jaakko and Rahmani, Rahim},
   booktitle={2023 IEEE 36th International Symposium on Computer-Based Medical Systems (CBMS)}, 
   title={COVID-19 detection from thermal image and tabular medical data utilizing multi-modal machine learning}, 
   year={2023},
   volume={},
   number={},
   pages={646-653},
-  doi={10.1109/CBMS58004.2023.00122}
-  }
+  doi={10.1109/CBMS58004.2023.00294}}
 ```
 
 
