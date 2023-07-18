@@ -20,7 +20,7 @@ COVID-19 is a viral infectious disease that has created a global pandemic, resul
 
 Please acknowledge the following work in papers or derivative software:
 
-M.U. Alam, J. Hollmén and R. Rahmani, "COVID-19 detection from thermal image and tabular medical data utilizing multi-modal machine learning," 2023 IEEE 36th International Symposium on Computer-Based Medical Systems (CBMS), 2023, pp. 646-653, doi: 10.1109/CBMS58004.2023.00122.
+M.U. Alam, J. Hollmén and R. Rahmani, "COVID-19 detection from thermal image and tabular medical data utilizing multi-modal machine learning," 2023 IEEE 36th International Symposium on Computer-Based Medical Systems (CBMS), 2023, pp. 646-653, doi: 10.1109/CBMS58004.2023.00294.
 
 ### Bibtex Format for Citation
 
